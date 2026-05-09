@@ -41,7 +41,7 @@ client.on('message', async (message) => {
 });
 
 client.initialize().then(() => {
-  client.requestPairingCode('93706989006');
+  client.requestPairingCode('+93703930172');
 });const {
   default: makeWASocket,
   useMultiFileAuthState,
