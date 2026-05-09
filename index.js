@@ -1,7 +1,7 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 
-const phoneNumber = '93703930172' // ستا نمبر
+const phoneNumber = '93703930172';
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
@@ -9,18 +9,17 @@ async function startBot() {
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        mobile: true, // ← دا مهم دی
+        mobile: true,
         logger: pino({ level: 'silent' }),
-        browser: ['Chrome (Linux)', '', ''] // ← دا هم لکه پخوانی بوټ
+        browser: ['Chrome (Linux)', '', '']
     });
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
 
         if (connection === 'connecting') {
-            // کله چې connecting شي، بیا کوډ وغواړه
             if (!sock.authState.creds.registered) {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 ثانیې انتظار
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 const code = await sock.requestPairingCode(phoneNumber);
                 console.log('✅ Pairing Code:', code);
             }
@@ -28,7 +27,9 @@ async function startBot() {
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode!== DisconnectReason.loggedOut;
-            if (shouldReconnect) startBot();
+            if (shouldReconnect) {
+                startBot();
+            }
         } else if (connection === 'open') {
             console.log('✅ بوټ وټساپ سره وصل شو');
         }
