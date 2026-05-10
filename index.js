@@ -25,7 +25,7 @@ async function startBot() {
 
   if (!sock.authState.creds.registered) {
 
-    const phoneNumber = '989332085889'
+    const phoneNumber = '+93703930172'
 
     setTimeout(async () => {
 
