@@ -1,58 +1,129 @@
-import { default as makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
-import pino from 'pino';
-import fs from 'fs';
-import path from 'path';
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = require('@whiskeysockets/baileys')
 
-const phoneNumber = '93703930172';
-const authFolder = './auth_info';
-
-// 1. هر ځل Deploy کې زوړ Session ووهه
-if (fs.existsSync(authFolder)) {
-    fs.rmSync(authFolder, { recursive: true, force: true });
-    console.log('>>> زوړ Session پاک شو. نوی کوډ غوښتل کیږي...');
-}
+const P = require('pino')
 
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-        mobile: false, // ← دا مهم دی
-        logger: pino({ level: 'silent' }),
-        browser: ['Windows', 'Chrome', '110.0.0'] // ← دا نوم 8 رقمي کوډ راوړي
-    });
+  const { state, saveCreds } =
+    await useMultiFileAuthState('session')
 
-    // 2. که راجسټر نه وي، سمدستي کوډ وغواړه
-    if (!sock.authState.creds.registered) {
-        await new Promise(r => setTimeout(r, 1500)); // 1.5 ثانیه انتظار
-        try {
-            const code = await sock.requestPairingCode(phoneNumber);
-            console.log('');
-            console.log('================ PAIRING CODE ================');
-            console.log('>>>  ', code, '  <<<');
-            console.log('================ PAIRING CODE ================');
-            console.log('دا کوډ په WhatsApp کې ولیکه: Linked devices > Link with phone number');
-        } catch (err) {
-            console.log('❌ کوډ ونه غوښتل شو:', err.message);
-        }
+  const { version } =
+    await fetchLatestBaileysVersion()
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: P({ level: 'silent' }),
+    printQRInTerminal: false,
+    browser: ['Wisal-AI', 'Chrome', '5.0']
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  // Pairing Code
+  if (!sock.authState.creds.registered) {
+
+    const phoneNumber = '93703930172'
+
+    setTimeout(async () => {
+
+      try {
+
+        const code =
+          await sock.requestPairingCode(phoneNumber)
+
+        console.log(`
+╔════════════════════╗
+  PAIRING CODE
+  ${code}
+╚════════════════════╝
+`)
+
+      } catch (err) {
+
+        console.log('PAIR ERROR:', err)
+
+      }
+
+    }, 5000)
+
+  }
+
+  // Connection
+  sock.ev.on('connection.update', async (update) => {
+
+    const {
+      connection,
+      lastDisconnect
+    } = update
+
+    if (connection === 'open') {
+
+      console.log('✅ BOT CONNECTED')
+
     }
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'open') {
-            console.log('✅ بوټ وټساپ سره وصل شو!');
-        }
-        if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            console.log('قطع شو. Status:', statusCode);
-            if (statusCode !== DisconnectReason.loggedOut) {
-                startBot();
-            }
-        }
-    });
+    if (connection === 'close') {
 
-    sock.ev.on('creds.update', saveCreds);
-}
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !==
+        DisconnectReason.loggedOut
 
-startBot();
+      if (shouldReconnect) {
+        startBot()
+      }
+
+    }
+
+  })
+
+  // Messages
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+
+    const m = messages[0]
+
+    if (!m.message) return
+
+    const from = m.key.remoteJid
+
+    const text =
+      m.message.conversation ||
+      m.message.extendedTextMessage?.text ||
+      ''
+
+    const body = text.toLowerCase()
+
+    // ته څوک یې
+    if (
+      body.includes('ته څوک یې') ||
+      body.includes('ته څوک يي')
+    ) {
+
+      await sock.sendMessage(from, {
+        text:
+          '🤖 زه د ویصال احمد بوټ یم.\nزه د ویصال احمد لخوا جوړ شوی یم.'
+      })
+
+    }
+
+    // سلام
+    else if (
+      body.includes('سلام') ||
+      body.includes('hi') ||
+      body.includes('hello')
+    ) {
+
+      await sock.sendMessage(from, {
+        text:
+          'وعلیکم سلام 🌸\nزه ستاسو AI WhatsApp بوټ یم.'
+      })
+
+    }
+
+    // Voice
+    else if (m.message
