@@ -1,81 +1,39 @@
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion
-} = require('@whiskeysockets/baileys')
+import { default as makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } from '@whiskeysockets/baileys';
+import pino from 'pino';
 
-const pino = require('pino')
+const phoneNumber = '93703930172';
 
 async function startBot() {
-  const { state, saveCreds } =
-    await useMultiFileAuthState('./session')
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
 
-  const { version } =
-    await fetchLatestBaileysVersion()
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: false,
+        mobile: false, // ← مهم: پخوانی بوټ هم false کاروي
+        logger: pino({ level: 'silent' }),
+        browser: Browsers.macOS('Desktop') // ← دا 428 Error حل کوي
+    });
 
-  const sock = makeWASocket({
-    version,
-    logger: pino({ level: 'silent' }),
-    auth: state,
-    printQRInTerminal: false,
-    browser: ['Wisal Bot', 'Chrome', '1.0.0']
-  })
-
-  sock.ev.on('creds.update', saveCreds)
-
-  if (!sock.authState.creds.registered) {
-
-    const phoneNumber = '+93703930172'
-
-    setTimeout(async () => {
-
-      const code =
-        await sock.requestPairingCode(phoneNumber)
-
-      console.log(`
-======================
-PAIR CODE: ${code}
-======================
-`)
-
-    }, 4000)
-  }
-
-  sock.ev.on('connection.update', ({ connection }) => {
-
-    if (connection === 'open') {
-      console.log('✅ BOT CONNECTED')
+    // که راجسټر نه وي، کوډ وغواړه
+    if (!sock.authState.creds.registered) {
+        setTimeout(async () => {
+            let code = await sock.requestPairingCode(phoneNumber);
+            code = code?.match(/.{1,4}/g)?.join('-') || code; // ← SK13-6445 ډوله یې کړه
+            console.log('✅ PAIR CODE:', code);
+        }, 3000); // 3 ثانیې انتظار
     }
 
-  })
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode!== DisconnectReason.loggedOut;
+            if (shouldReconnect) startBot();
+        } else if (connection === 'open') {
+            console.log('✅ بوټ وټساپ سره وصل شو');
+        }
+    });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-
-    const msg = messages[0]
-
-    if (!msg.message) return
-
-    const from = msg.key.remoteJid
-
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      ''
-
-    if (
-      text.includes('ته څوک یې') ||
-      text.includes('ته څوک يي')
-    ) {
-
-      await sock.sendMessage(from, {
-        text:
-          'زه د ویصال احمد بوټ یم 🤖\nزه د ویصال احمد لخوا جوړ شوی یم.'
-      })
-
-    }
-
-  })
-
+    sock.ev.on('creds.update', saveCreds);
 }
 
-startBot()
+startBot();
